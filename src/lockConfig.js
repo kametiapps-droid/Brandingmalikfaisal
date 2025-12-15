@@ -1,10 +1,10 @@
 const LOCK_KEY = "ktp_ls_v2";
 const UNLOCK_KEY = "ktp_ul_v2";
-const LOCK_DURATION = 60 * 1000;
 
-let lockTimer = null;
+let autoLockTimer = null;
 let countdownInterval = null;
-let countdownCallback = null;
+let onCountdownUpdate = null;
+let onLockStatusChange = null;
 
 const hashCode = (str) => {
   let hash = 0;
@@ -36,57 +36,33 @@ export const UNLOCKED_CATEGORIES = ["teaAndCoffee", "breakfast"];
 
 export const PAYMENT_LINK = "https://pay.ziina.com/faisalmalik1168/pNZ7rnwiu";
 
-const clearTimers = () => {
-  if (lockTimer) {
-    clearTimeout(lockTimer);
-    lockTimer = null;
-  }
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-  }
+export const setOnCountdownUpdate = (callback) => {
+  onCountdownUpdate = callback;
 };
 
-const startAutoLockTimer = () => {
-  clearTimers();
-  
-  const unlockTime = Date.now();
-  
+export const setOnLockStatusChange = (callback) => {
+  onLockStatusChange = callback;
+};
+
+const startAutoLock = (remainingSeconds = 60) => {
+  if (autoLockTimer) clearTimeout(autoLockTimer);
+  if (countdownInterval) clearInterval(countdownInterval);
+
+  let secondsLeft = remainingSeconds;
+
+  if (onCountdownUpdate) onCountdownUpdate(secondsLeft);
+
   countdownInterval = setInterval(() => {
-    const elapsed = Date.now() - unlockTime;
-    const remaining = Math.max(0, LOCK_DURATION - elapsed);
-    const secondsLeft = Math.ceil(remaining / 1000);
-    
-    if (countdownCallback) {
-      countdownCallback(secondsLeft);
-    }
-    
-    if (remaining <= 0) {
+    secondsLeft--;
+    if (onCountdownUpdate) onCountdownUpdate(secondsLeft);
+    if (secondsLeft <= 0) {
       lockApp();
     }
   }, 1000);
-  
-  lockTimer = setTimeout(() => {
+
+  autoLockTimer = setTimeout(() => {
     lockApp();
-  }, LOCK_DURATION);
-};
-
-export const setCountdownCallback = (callback) => {
-  countdownCallback = callback;
-};
-
-export const getRemainingTime = () => {
-  try {
-    const stored = localStorage.getItem(UNLOCK_KEY);
-    if (!stored) return 0;
-    const parsed = JSON.parse(atob(stored));
-    const expectedHash = generateSecureHash(parsed.t + LOCK_KEY);
-    if (parsed.h !== expectedHash) return 0;
-    const remaining = Math.max(0, LOCK_DURATION - (Date.now() - parsed.t));
-    return Math.ceil(remaining / 1000);
-  } catch {
-    return 0;
-  }
+  }, remainingSeconds * 1000);
 };
 
 export const isUnlocked = () => {
@@ -95,7 +71,7 @@ export const isUnlocked = () => {
     if (!stored) return false;
     const parsed = JSON.parse(atob(stored));
     const expectedHash = generateSecureHash(parsed.t + LOCK_KEY);
-    return parsed.h === expectedHash && Date.now() - parsed.t < LOCK_DURATION;
+    return parsed.h === expectedHash && Date.now() - parsed.t < 60 * 1000;
   } catch {
     return false;
   }
@@ -111,18 +87,21 @@ export const unlockWithCode = (code) => {
       v: 2
     };
     localStorage.setItem(UNLOCK_KEY, btoa(JSON.stringify(data)));
-    startAutoLockTimer();
+    startAutoLock(60);
+    if (onLockStatusChange) onLockStatusChange(true);
     return true;
   }
   return false;
 };
 
 export const lockApp = () => {
-  clearTimers();
+  if (autoLockTimer) clearTimeout(autoLockTimer);
+  if (countdownInterval) clearInterval(countdownInterval);
+  autoLockTimer = null;
+  countdownInterval = null;
   localStorage.removeItem(UNLOCK_KEY);
-  if (countdownCallback) {
-    countdownCallback(0);
-  }
+  if (onCountdownUpdate) onCountdownUpdate(0);
+  if (onLockStatusChange) onLockStatusChange(false);
 };
 
 export const isCategoryLocked = (categoryKey) => {
@@ -131,26 +110,35 @@ export const isCategoryLocked = (categoryKey) => {
 };
 
 export const initAutoLock = () => {
-  if (isUnlocked()) {
-    const remaining = getRemainingTime();
+  try {
+    const stored = localStorage.getItem(UNLOCK_KEY);
+    if (!stored) return;
+    const parsed = JSON.parse(atob(stored));
+    const expectedHash = generateSecureHash(parsed.t + LOCK_KEY);
+    if (parsed.h !== expectedHash) return;
+    
+    const elapsed = Date.now() - parsed.t;
+    const remaining = Math.ceil((60 * 1000 - elapsed) / 1000);
+    
     if (remaining > 0) {
-      clearTimers();
-      
-      countdownInterval = setInterval(() => {
-        const currentRemaining = getRemainingTime();
-        if (countdownCallback) {
-          countdownCallback(currentRemaining);
-        }
-        if (currentRemaining <= 0) {
-          lockApp();
-        }
-      }, 1000);
-      
-      lockTimer = setTimeout(() => {
-        lockApp();
-      }, remaining * 1000);
+      startAutoLock(remaining);
+      if (onLockStatusChange) onLockStatusChange(true);
     } else {
       lockApp();
     }
+  } catch {
+    lockApp();
   }
 };
+
+setOnCountdownUpdate((seconds) => {
+  console.log("Auto-lock in:", seconds, "seconds");
+});
+
+setOnLockStatusChange((unlocked) => {
+  if (!unlocked) {
+    window.location.reload();
+  }
+});
+
+initAutoLock();
