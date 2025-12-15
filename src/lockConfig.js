@@ -6,7 +6,7 @@ const hashCode = (str) => {
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
+    hash = hash & hash; // 🔹 unchanged (same as yours)
   }
   return Math.abs(hash).toString(16);
 };
@@ -28,7 +28,6 @@ const VALID_ADMIN_HASHES = [
 ];
 
 export const UNLOCKED_CATEGORIES = ["teaAndCoffee", "breakfast"];
-
 export const PAYMENT_LINK = "https://pay.ziina.com/faisalmalik1168/pNZ7rnwiu";
 
 export const isUnlocked = () => {
@@ -45,6 +44,7 @@ export const isUnlocked = () => {
 
 export const unlockWithCode = (code) => {
   const inputHash = generateSecureHash(code);
+
   if (VALID_ADMIN_HASHES.includes(inputHash)) {
     const timestamp = Date.now();
     const data = {
@@ -52,7 +52,14 @@ export const unlockWithCode = (code) => {
       h: generateSecureHash(timestamp + LOCK_KEY),
       v: 2
     };
+
     localStorage.setItem(UNLOCK_KEY, btoa(JSON.stringify(data)));
+
+    // ✅ AUTO LOCK AFTER 1 MINUTE (NO REFRESH NEEDED)
+    setTimeout(() => {
+      localStorage.removeItem(UNLOCK_KEY);
+    }, 60 * 1000);
+
     return true;
   }
   return false;
