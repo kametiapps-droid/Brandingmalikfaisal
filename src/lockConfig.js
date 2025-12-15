@@ -37,7 +37,7 @@ export const isUnlocked = () => {
     if (!stored) return false;
     const parsed = JSON.parse(atob(stored));
     const expectedHash = generateSecureHash(parsed.t + LOCK_KEY);
-    return parsed.h === expectedHash && Date.now() - parsed.t < 365 * 24 * 60 * 60 * 1000;
+    return parsed.h === expectedHash && Date.now() - parsed.t < 60 * 1000;
   } catch {
     return false;
   }
