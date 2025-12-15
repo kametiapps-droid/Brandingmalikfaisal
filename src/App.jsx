@@ -1,11 +1,103 @@
 import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react'
 import { menuData, restaurantInfo } from './menuData'
 import OptimizedImage from './OptimizedImage'
+import { isUnlocked, isCategoryLocked, unlockWithCode, PAYMENT_LINK, UNLOCKED_CATEGORIES } from './lockConfig'
 import './App.css'
 
 const MAPS_URL = "https://maps.app.goo.gl/vfRGC8KHMorh7fKV8"
 
-const Header = memo(function Header({ onBack, showBack, categoryName, categoryIcon }) {
+const LockIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+)
+
+const PaymentModal = memo(function PaymentModal({ isOpen, onClose }) {
+  if (!isOpen) return null
+  
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>×</button>
+        <div className="modal-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <h3 className="modal-title">Premium Content</h3>
+        <p className="modal-text">This content is locked. Complete payment to unlock all menu categories and features.</p>
+        <a href={PAYMENT_LINK} target="_blank" rel="noopener noreferrer" className="modal-pay-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+            <line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
+          Unlock Now - Pay Here
+        </a>
+        <p className="modal-note">Secure payment via Ziina</p>
+      </div>
+    </div>
+  )
+})
+
+const AdminUnlockModal = memo(function AdminUnlockModal({ isOpen, onClose, onUnlock }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState(false)
+  
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (unlockWithCode(code)) {
+      onUnlock()
+      onClose()
+    } else {
+      setError(true)
+      setTimeout(() => setError(false), 2000)
+    }
+  }
+  
+  if (!isOpen) return null
+  
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>×</button>
+        <h3 className="modal-title">Admin Access</h3>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            placeholder="Enter admin code"
+            className={`admin-input ${error ? 'error' : ''}`}
+            autoComplete="off"
+          />
+          <button type="submit" className="admin-submit">Unlock</button>
+        </form>
+        {error && <p className="admin-error">Invalid code</p>}
+      </div>
+    </div>
+  )
+})
+
+const LockedOverlay = memo(function LockedOverlay({ onClick }) {
+  return (
+    <div className="locked-overlay" onClick={onClick}>
+      <div className="lock-badge">
+        <LockIcon />
+      </div>
+    </div>
+  )
+})
+
+const Header = memo(function Header({ onBack, showBack, categoryName, categoryIcon, onShowPayment, appUnlocked }) {
+  const handleCallClick = (e) => {
+    if (!appUnlocked) {
+      e.preventDefault()
+      onShowPayment()
+    }
+  }
+  
   return (
     <header className="header">
       <div className="header-bg"></div>
@@ -37,11 +129,14 @@ const Header = memo(function Header({ onBack, showBack, categoryName, categoryIc
                 <span className="brand-sub">TEA PALACE</span>
               </div>
             </div>
-            <a href={`tel:${restaurantInfo.phone1}`} className="call-btn">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-            </a>
+            <div className={`call-btn-wrap ${!appUnlocked ? 'locked' : ''}`}>
+              <a href={`tel:${restaurantInfo.phone1}`} className="call-btn" onClick={handleCallClick}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+              </a>
+              {!appUnlocked && <div className="mini-lock"><LockIcon /></div>}
+            </div>
           </>
         )}
       </div>
@@ -49,38 +144,53 @@ const Header = memo(function Header({ onBack, showBack, categoryName, categoryIc
   )
 })
 
-const HeroBanner = memo(function HeroBanner() {
+const HeroBanner = memo(function HeroBanner({ onShowPayment, appUnlocked }) {
+  const handleLockedClick = (e) => {
+    if (!appUnlocked) {
+      e.preventDefault()
+      onShowPayment()
+    }
+  }
+  
   return (
     <div className="hero-banner">
       <div className="hero-content">
         <div className="tagline-badge">{restaurantInfo.tagline}</div>
         
         <div className="contact-pills">
-          <a href={`tel:${restaurantInfo.phone1}`} className="pill">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-            </svg>
-            {restaurantInfo.phone1}
-          </a>
-          <a href={`tel:${restaurantInfo.phone2}`} className="pill">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-              <line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-            {restaurantInfo.phone2}
-          </a>
+          <div className={`pill-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+            <a href={`tel:${restaurantInfo.phone1}`} className="pill" onClick={handleLockedClick}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+              {appUnlocked ? restaurantInfo.phone1 : '••• ••• ••••'}
+            </a>
+            {!appUnlocked && <div className="pill-lock"><LockIcon /></div>}
+          </div>
+          <div className={`pill-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+            <a href={`tel:${restaurantInfo.phone2}`} className="pill" onClick={handleLockedClick}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+              {appUnlocked ? restaurantInfo.phone2 : '••• ••• ••••'}
+            </a>
+            {!appUnlocked && <div className="pill-lock"><LockIcon /></div>}
+          </div>
         </div>
 
-        <a href={MAPS_URL} target="_blank" rel="noopener noreferrer" className="location-card">
-          <div className="location-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-          <span className="location-text">{restaurantInfo.address}</span>
-          <span className="map-btn">View Map</span>
-        </a>
+        <div className={`location-card-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+          <a href={MAPS_URL} target="_blank" rel="noopener noreferrer" className="location-card" onClick={handleLockedClick}>
+            <div className="location-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <span className="location-text">{appUnlocked ? restaurantInfo.address : 'Location locked - Pay to view'}</span>
+            <span className="map-btn">{appUnlocked ? 'View Map' : <LockIcon />}</span>
+          </a>
+        </div>
 
         <div className="features-strip">
           <div className="feature-chip"><span className="check-icon">✓</span> Free Delivery</div>
@@ -92,31 +202,44 @@ const HeroBanner = memo(function HeroBanner() {
   )
 })
 
-const CategoryCard = memo(function CategoryCard({ categoryKey, category, onClick, index }) {
+const CategoryCard = memo(function CategoryCard({ categoryKey, category, onClick, index, isLocked, onShowPayment }) {
+  const handleClick = () => {
+    if (isLocked) {
+      onShowPayment()
+    } else {
+      onClick(categoryKey)
+    }
+  }
+  
   return (
     <button 
-      className="category-card" 
-      onClick={() => onClick(categoryKey)}
+      className={`category-card ${isLocked ? 'category-locked' : ''}`}
+      onClick={handleClick}
       style={{ animationDelay: `${index * 0.04}s` }}
     >
       <div className="card-image-wrap">
         <OptimizedImage 
           src={category.image} 
           alt={category.name}
-          className="card-image"
+          className={`card-image ${isLocked ? 'blurred' : ''}`}
           priority={index < 4}
         />
         <div className="card-overlay"></div>
         <div className="card-badge">{category.items.length}</div>
+        {isLocked && <LockedOverlay />}
       </div>
       <div className="card-body">
         <div className="card-text">
           <h3 className="card-title">{category.name}</h3>
           <p className="card-subtitle">{category.nameAr}</p>
         </div>
-        <svg className="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
+        {isLocked ? (
+          <div className="card-lock-icon"><LockIcon /></div>
+        ) : (
+          <svg className="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        )}
       </div>
     </button>
   )
@@ -213,7 +336,14 @@ const CategoryPage = memo(function CategoryPage({ category }) {
   )
 })
 
-const Footer = memo(function Footer() {
+const Footer = memo(function Footer({ onShowPayment, onShowAdmin, appUnlocked }) {
+  const handleLockedClick = (e) => {
+    if (!appUnlocked) {
+      e.preventDefault()
+      onShowPayment()
+    }
+  }
+  
   return (
     <footer className="footer">
       <div className="footer-main">
@@ -241,42 +371,54 @@ const Footer = memo(function Footer() {
           <p className="footer-motto">"We serve happiness!"</p>
           
           <div className="footer-contact-grid">
-            <a href={`tel:${restaurantInfo.phone1}`} className="footer-contact-card">
-              <div className="contact-icon-wrap">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                </svg>
-              </div>
-              <span>{restaurantInfo.phone1}</span>
-            </a>
-            <a href={`tel:${restaurantInfo.phone2}`} className="footer-contact-card">
-              <div className="contact-icon-wrap">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                  <line x1="12" y1="18" x2="12.01" y2="18"/>
-                </svg>
-              </div>
-              <span>{restaurantInfo.phone2}</span>
-            </a>
+            <div className={`footer-contact-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+              <a href={`tel:${restaurantInfo.phone1}`} className="footer-contact-card" onClick={handleLockedClick}>
+                <div className="contact-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  </svg>
+                </div>
+                <span>{appUnlocked ? restaurantInfo.phone1 : '•••••••••'}</span>
+              </a>
+              {!appUnlocked && <div className="footer-lock"><LockIcon /></div>}
+            </div>
+            <div className={`footer-contact-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+              <a href={`tel:${restaurantInfo.phone2}`} className="footer-contact-card" onClick={handleLockedClick}>
+                <div className="contact-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                    <line x1="12" y1="18" x2="12.01" y2="18"/>
+                  </svg>
+                </div>
+                <span>{appUnlocked ? restaurantInfo.phone2 : '•••••••••'}</span>
+              </a>
+              {!appUnlocked && <div className="footer-lock"><LockIcon /></div>}
+            </div>
           </div>
           
-          <a href={MAPS_URL} target="_blank" rel="noopener noreferrer" className="footer-location-card">
-            <div className="location-icon-wrap">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-            </div>
-            <div className="location-details">
-              <span className="location-label">Find Us Here</span>
-              <span className="location-text">{restaurantInfo.address}</span>
-            </div>
-            <div className="location-arrow">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </div>
-          </a>
+          <div className={`footer-location-wrap ${!appUnlocked ? 'locked-item' : ''}`}>
+            <a href={MAPS_URL} target="_blank" rel="noopener noreferrer" className="footer-location-card" onClick={handleLockedClick}>
+              <div className="location-icon-wrap">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+              </div>
+              <div className="location-details">
+                <span className="location-label">Find Us Here</span>
+                <span className="location-text">{appUnlocked ? restaurantInfo.address : 'Location locked'}</span>
+              </div>
+              <div className="location-arrow">
+                {appUnlocked ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                ) : (
+                  <LockIcon />
+                )}
+              </div>
+            </a>
+          </div>
           
           <div className="footer-features">
             <div className="footer-feature">
@@ -366,6 +508,18 @@ const Footer = memo(function Footer() {
           </div>
           
           <p className="dev-tagline">Building Digital Experiences ✨</p>
+          
+          <a href={PAYMENT_LINK} target="_blank" rel="noopener noreferrer" className="payment-btn-footer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            Payment
+          </a>
+          
+          <button className="admin-access-btn" onClick={onShowAdmin}>
+            Admin
+          </button>
         </div>
       </div>
     </footer>
@@ -374,6 +528,9 @@ const Footer = memo(function Footer() {
 
 function App() {
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [appUnlocked, setAppUnlocked] = useState(isUnlocked())
   
   const categories = useMemo(() => Object.entries(menuData), [])
   const totalItems = useMemo(() => 
@@ -389,6 +546,14 @@ function App() {
     setSelectedCategory(null)
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
+  
+  const handleShowPayment = useCallback(() => {
+    setShowPaymentModal(true)
+  }, [])
+  
+  const handleUnlock = useCallback(() => {
+    setAppUnlocked(true)
+  }, [])
 
   return (
     <div className="app">
@@ -397,11 +562,13 @@ function App() {
         onBack={handleBack}
         categoryName={selectedCategory ? menuData[selectedCategory].name : ''}
         categoryIcon={selectedCategory ? menuData[selectedCategory].icon : ''}
+        onShowPayment={handleShowPayment}
+        appUnlocked={appUnlocked}
       />
       
       {!selectedCategory ? (
         <>
-          <HeroBanner />
+          <HeroBanner onShowPayment={handleShowPayment} appUnlocked={appUnlocked} />
           <main className="main-content">
             <div className="section-header">
               <h2 className="section-title">Our Menu</h2>
@@ -419,6 +586,8 @@ function App() {
                   category={category}
                   onClick={handleCategoryClick}
                   index={index}
+                  isLocked={isCategoryLocked(key)}
+                  onShowPayment={handleShowPayment}
                 />
               ))}
             </div>
@@ -428,7 +597,22 @@ function App() {
         <CategoryPage category={menuData[selectedCategory]} />
       )}
       
-      <Footer />
+      <Footer 
+        onShowPayment={handleShowPayment} 
+        onShowAdmin={() => setShowAdminModal(true)}
+        appUnlocked={appUnlocked}
+      />
+      
+      <PaymentModal 
+        isOpen={showPaymentModal} 
+        onClose={() => setShowPaymentModal(false)} 
+      />
+      
+      <AdminUnlockModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        onUnlock={handleUnlock}
+      />
     </div>
   )
 }
